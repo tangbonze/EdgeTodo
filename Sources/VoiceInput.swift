@@ -37,7 +37,7 @@ final class VoiceInput {
                 DispatchQueue.main.async { self.onError?("没拿到语音识别权限") }
                 return
             }
-            AVAudioApplication.requestRecordPermission { granted in
+            requestMicPermission { granted in
                 DispatchQueue.main.async {
                     guard granted else {
                         self.onError?("没拿到麦克风权限")
@@ -45,6 +45,18 @@ final class VoiceInput {
                     }
                     self.beginSession()
                 }
+            }
+        }
+    }
+
+    /// 麦克风权限：macOS 14+ 走 AVAudioApplication，更低版本（最低支持 13）
+    /// 只能走 AVCaptureDevice —— 它申请的是同一个 TCC 麦克风权限。
+    private func requestMicPermission(_ completion: @escaping (Bool) -> Void) {
+        if #available(macOS 14.0, *) {
+            AVAudioApplication.requestRecordPermission(completionHandler: completion)
+        } else {
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                DispatchQueue.main.async { completion(granted) }
             }
         }
     }

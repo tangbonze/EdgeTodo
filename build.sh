@@ -16,7 +16,7 @@ set +e
 swiftc \
   -O \
   -swift-version 5 \
-  -target arm64-apple-macos27.0 \
+  -target arm64-apple-macos13.0 \
   -framework Cocoa \
   -framework SwiftUI \
   -framework EventKit \

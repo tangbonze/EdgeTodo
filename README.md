@@ -6,7 +6,7 @@
 
 前往 [Releases](https://github.com/tangbonze/EdgeTodo/releases) 下载最新版 `EdgeTodo-*.dmg`，打开后把 `EdgeTodo.app` 拖进「应用程序」即可。
 
-- **系统要求：macOS 27+**（Apple Silicon，二进制最低版本锁定 27.0，低版本无法启动）
+- **系统要求：macOS 13+**（Apple Silicon；也可用 `swiftc -target arm64-apple-macos13.0` 自行编译验证）
 - 首次启动会在菜单栏出现 ☑️ 图标，无 Dock 图标
 - 首次使用会弹系统授权：允许「侧边待办」访问提醒事项（读写都走系统提醒事项，iCloud 同步）
 - 应用为 ad-hoc 签名，首次打开如被 Gatekeeper 拦截：**右键 → 打开**，或在终端执行
@@ -18,6 +18,7 @@
 - 控件统一胶囊化：列表选择器是带折叠箭头的胶囊，右下角的刷新是圆形 hover 按钮，到期时间做成带底色的胶囊（今天橙、逾期红）。
 - 列表行没有卡片边框，只在 hover 时浮出一层 6% 的浅色；编辑提醒时先压一层 10% 的暗色 scrim，再叠一张卡片。
 - 明暗两套自成一体：浅色 +白、深色 +黑，文字一律用语义色，切系统外观不用改任何常量。
+- macOS 26 及以上用系统玻璃材质，26 以下自动回退到系统磨砂材质，两者观感接近。
 
 > 仓库里不放界面截图 —— 待办条目容易带出私人信息。想看效果直接跑起来，或者用下面的 `demoMode` 开关（假数据已全部换成通用条目）。
 
@@ -97,6 +98,7 @@ codesign --force --sign "Developer ID Application: 你的名字 (TEAMID)" --opti
 - 边缘拉手同时就是悬停热区：宽 7pt、长 52pt（可拖动改高度位置），所以只有把鼠标停在拉手上才会展开，不会误触。宽长可在 `App.swift` 里调 `edgeStripWidth` / `edgeStripHeight`。
 - 面板固定 380×600，跟随鼠标所在屏幕弹出。
 - 语音输入用系统**本地**听写模型（`requiresOnDeviceRecognition`），不联网；需要麦克风 + 语音识别两项权限，首次点麦克风会弹窗。已知坑：部分蓝牙耳机用 `AVAudioEngine` 的 inputNode 收不到声音（换内置麦克风即可）。
+- 语音识别的**本地模型**在部分系统上可能没装好，此时系统会退回联网识别；这是系统行为，应用不强制。
 
 ## 调试小开关（开发用）
 
@@ -112,5 +114,8 @@ defaults write com.tangbonze.edgetodo forcePermission -bool YES # 预览「需�
 defaults delete com.tangbonze.edgetodo showOnLaunch
 ```
 
-也支持环境变量 `EDGETODO_SHOW=1` / `EDGETODO_DEMO=1`（需直接跑
-`dist/EdgeTodo.app/Contents/MacOS/EdgeTodo`）。
+也支持环境变量（需直接跑 `dist/EdgeTodo.app/Contents/MacOS/EdgeTodo`）：
+
+- `EDGETODO_SHOW=1` —— 启动即展开面板
+- `EDGETODO_DEMO=1` —— 假数据
+- `EDGETODO_NO_GLASS=1` —— 强制走 macOS 13~25 的磨砂回退分支，方便在新系统上验证老系统的效果

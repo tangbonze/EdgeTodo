@@ -77,15 +77,16 @@ enum Look {
     }
 }
 
-/// Liquid Glass 卡片：面板底与弹层都用它
+/// 面板底 / 弹层用的卡片：macOS 26+ 用系统玻璃，更低版本回退到系统磨砂材质
 final class GlassCard: NSView {
     var onClick: (() -> Void)?
-    private let glass = NSGlassEffectView()
+    private let background: NSView
     private let wash = NSView()
     private let radius: CGFloat
 
     init(cornerRadius: CGFloat = 26, interactive: Bool = true) {
         self.radius = cornerRadius
+        self.background = Self.makeBackground(cornerRadius: cornerRadius, interactive: interactive)
         super.init(frame: .zero)
         // 卡片自己也按圆角裁切：玻璃层的圆角遮罩在个别状态下（比如系统授权弹窗
         // 挡住 runloop 之后的首次布局）会短暂失效，方角就会从白雾底下露出来。
@@ -94,14 +95,8 @@ final class GlassCard: NSView {
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
 
-        glass.cornerRadius = cornerRadius
-        glass.style = .regular
-        glass.effectIsInteractive = interactive
-        glass.tintColor = Look.isDark
-            ? NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.42)
-            : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.55)
-        glass.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(glass)
+        background.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(background)
 
         // 白雾：玻璃之上再压一层薄薄的底，让面板整体更接近白色
         wash.wantsLayer = true
@@ -112,10 +107,10 @@ final class GlassCard: NSView {
         addSubview(wash)
 
         NSLayoutConstraint.activate([
-            glass.leadingAnchor.constraint(equalTo: leadingAnchor),
-            glass.trailingAnchor.constraint(equalTo: trailingAnchor),
-            glass.topAnchor.constraint(equalTo: topAnchor),
-            glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+            background.leadingAnchor.constraint(equalTo: leadingAnchor),
+            background.trailingAnchor.constraint(equalTo: trailingAnchor),
+            background.topAnchor.constraint(equalTo: topAnchor),
+            background.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             wash.leadingAnchor.constraint(equalTo: leadingAnchor),
             wash.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -123,6 +118,35 @@ final class GlassCard: NSView {
             wash.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
         applyWash()
+    }
+
+    /// macOS 26+ 用系统玻璃；更低版本（应用最低支持 macOS 13）没有这个类，
+    /// 回退到系统磨砂材质 NSVisualEffectView —— 观感接近，但不是折射玻璃。
+    /// EDGETODO_NO_GLASS=1 可以在新系统上强制走回退分支，方便验证老系统效果。
+    private static func makeBackground(cornerRadius: CGFloat, interactive: Bool) -> NSView {
+        let forceFallback = ProcessInfo.processInfo.environment["EDGETODO_NO_GLASS"] != nil
+        if !forceFallback, #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = cornerRadius
+            glass.style = .regular
+            if #available(macOS 27.0, *) {
+                glass.effectIsInteractive = interactive
+            }
+            glass.tintColor = Look.isDark
+                ? NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.42)
+                : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.55)
+            return glass
+        } else {
+            let blur = NSVisualEffectView()
+            blur.material = .hudWindow
+            blur.blendingMode = .behindWindow
+            blur.state = .active
+            blur.wantsLayer = true
+            blur.layer?.cornerRadius = cornerRadius
+            blur.layer?.cornerCurve = .continuous
+            blur.layer?.masksToBounds = true
+            return blur
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
