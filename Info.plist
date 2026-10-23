@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>CFBundleName</key>
+	<string>EdgeTodo</string>
+	<key>CFBundleDisplayName</key>
+	<string>侧边待办</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.tangbonze.edgetodo</string>
+	<key>CFBundleExecutable</key>
+	<string>EdgeTodo</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>27.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>侧边待办需要读取和写入你的提醒事项，以便在屏幕边缘直接查看、新增和设置提醒，并与 iCloud 保持同步。</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>侧边待办需要读取和写入你的提醒事项，以便在屏幕边缘直接查看、新增和设置提醒，并与 iCloud 保持同步。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>侧边待办用麦克风接收你的语音，转成待办文字。音频只在本机识别，不上传。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>侧边待办会用系统自带的本地语音识别模型，把你说的话转成待办文字。</string>
+</dict>
+</plist>

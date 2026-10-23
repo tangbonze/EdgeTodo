@@ -1,0 +1,7 @@
+# 构建产物
+build/
+dist/
+*.dmg
+
+# 系统垃圾
+.DS_Store
