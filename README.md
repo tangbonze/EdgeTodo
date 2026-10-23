@@ -6,20 +6,18 @@
 
 前往 [Releases](https://github.com/tangbonze/EdgeTodo/releases) 下载最新版 `EdgeTodo-*.dmg`，打开后把 `EdgeTodo.app` 拖进「应用程序」即可。
 
-- **系统要求：macOS 27+**（用到 macOS 26 引入的 Liquid Glass API）
+- **系统要求：macOS 27+**（Apple Silicon，二进制最低版本锁定 27.0，低版本无法启动）
 - 首次启动会在菜单栏出现 ☑️ 图标，无 Dock 图标
 - 首次使用会弹系统授权：允许「侧边待办」访问提醒事项（读写都走系统提醒事项，iCloud 同步）
 - 应用为 ad-hoc 签名，首次打开如被 Gatekeeper 拦截：**右键 → 打开**，或在终端执行
   `xattr -dr com.apple.quarantine /Applications/EdgeTodo.app`
 
-## 界面 · macOS 27 Liquid Glass
+## 界面
 
-视觉层按 macOS 27 的 Liquid Glass 语言重做：
-
-- 面板底直接用系统 `NSGlassEffectView`（cornerRadius 26、`effectIsInteractive`），玻璃卡就是窗口本身 —— 窗口的 alpha 形状等于圆角卡片，系统阴影才会沿着圆角走；换成别的壁纸，底下的内容会真的被折射、模糊。
+- 面板是一张圆角半透明卡片，圆角 26，窗口本身的形状就等于圆角卡片，系统阴影沿着圆角走。
 - 控件统一胶囊化：列表选择器是带折叠箭头的胶囊，右下角的刷新是圆形 hover 按钮，到期时间做成带底色的胶囊（今天橙、逾期红）。
-- 列表行没有卡片边框，只在 hover 时浮出一层 6% 的浅色；编辑提醒时先压一层 10% 的暗色 scrim，再叠一张玻璃卡。
-- 明暗两套自成一体：玻璃底色浅色 +白、深色 +黑，文字一律用语义色，切系统外观不用改任何常量。
+- 列表行没有卡片边框，只在 hover 时浮出一层 6% 的浅色；编辑提醒时先压一层 10% 的暗色 scrim，再叠一张卡片。
+- 明暗两套自成一体：浅色 +白、深色 +黑，文字一律用语义色，切系统外观不用改任何常量。
 
 > 仓库里不放界面截图 —— 待办条目容易带出私人信息。想看效果直接跑起来，或者用下面的 `demoMode` 开关（假数据已全部换成通用条目）。
 
