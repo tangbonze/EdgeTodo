@@ -1028,8 +1028,12 @@ final class PanelController: NSObject, NSTextFieldDelegate {
     // MARK: 刷新
 
     func refresh() {
-        listButton.attributedTitle = listChipTitle(store.selectedList?.title ?? L10n.t("提醒事项", "Reminders"))
-        listButton.isEnabled = !store.lists.isEmpty
+        // 演示模式用语言对应的假列表名，避免英文界面里挂着一串中文真实列表名
+        let listName = demoMode
+            ? L10n.t("提醒", "Reminders")
+            : (store.selectedList?.title ?? L10n.t("提醒事项", "Reminders"))
+        listButton.attributedTitle = listChipTitle(listName)
+        listButton.isEnabled = demoMode || !store.lists.isEmpty
         listButton.invalidateIntrinsicContentSize()
         let shown = demoMode ? Self.demoItems().count : store.items.count
         countLabel.stringValue = (store.authGranted || demoMode) && shown > 0 ? "\(shown)" : ""

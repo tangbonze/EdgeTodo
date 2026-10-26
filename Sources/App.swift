@@ -297,6 +297,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for sub in view.subviews { walk(sub, depth + 1) }
         }
         walk(controller.root, 0)
+        if let button = statusItem.button, let win = button.window {
+            let f = win.frame
+            // 菜单栏项的屏幕位置，方便自动化点击
+            let cgY = (win.screen?.frame.maxY ?? 0) - f.maxY
+            lines.append("--- statusitem: NS(\(Int(f.minX)),\(Int(f.minY)),\(Int(f.width)),\(Int(f.height))) CG(\(Int(f.midX)),\(Int(cgY + f.height / 2))) ---")
+        }
         if let menu = statusItem.menu {
             lines.append("--- menu ---")
             for item in menu.items {
