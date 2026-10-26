@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 不提前激活的话第一次点击会被系统拿去激活 App，到不了视图）
     private var enterActivateAt: Date?
 
-    private let controller = PanelController()
+    private var controller = PanelController()
     private let store = TodoStore.shared
     private let panelSize = NSSize(width: 380, height: 600)   // 玻璃卡片即窗口本身，阴影沿圆角走
     private let edgeStripWidth: CGFloat = 7
@@ -274,6 +274,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             || UserDefaults.standard.bool(forKey: "showOnLaunch") {
             showPanel(focus: false)
         }
+
+        // 开发用：把当前界面的文案全部打到 stderr，用来核对英文翻译有没有漏（EDGETODO_DUMP=1）
+        if ProcessInfo.processInfo.environment["EDGETODO_DUMP"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.dumpUIStrings()
+            }
+        }
+    }
+
+    /// 遍历面板视图树，把文字打出来（调试用）
+    private func dumpUIStrings() {
+        var lines: [String] = []
+        func walk(_ view: NSView, _ depth: Int) {
+            let pad = String(repeating: "  ", count: depth)
+            if let field = view as? NSTextField, !field.stringValue.isEmpty {
+                let hint = field.placeholderString.map { "  [placeholder: \($0)]" } ?? ""
+                lines.append("\(pad)text: \(field.stringValue)\(hint)")
+            } else if let button = view as? NSButton, !button.title.isEmpty {
+                lines.append("\(pad)btn: \(button.title)")
+            }
+            for sub in view.subviews { walk(sub, depth + 1) }
+        }
+        walk(controller.root, 0)
+        if let menu = statusItem.menu {
+            lines.append("--- menu ---")
+            for item in menu.items {
+                if item.isSeparatorItem { lines.append("  ---"); continue }
+                lines.append("  \(item.title)")
+                if let sub = item.submenu {
+                    for child in sub.items where !child.isSeparatorItem {
+                        lines.append("    \(child.title)")
+                    }
+                }
+            }
+        }
+        FileHandle.standardError.write(
+            ("--- UI strings (" + (L10n.isEnglish ? "en" : "zh") + ") ---\n" + lines.joined(separator: "\n") + "\n--- end ---\n")
+                .data(using: .utf8)!
+        )
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -289,32 +328,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var dockLeftItem: NSMenuItem?
     private var loginMenuItem: NSMenuItem?
     private var displayMenuItem: NSMenuItem?
+    private var languageMenuItem: NSMenuItem?
 
     private func setupStatusItem() {
+        if let old = statusItem {
+            NSStatusBar.system.removeStatusItem(old)   // 切语言时重建，旧的要摘掉
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "checklist", accessibilityDescription: "侧边待办")
+            let image = NSImage(
+                systemSymbolName: "checklist",
+                accessibilityDescription: L10n.t("侧边待办", "EdgeTodo")
+            )
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "侧边待办（⌥⌘T）"
+            button.toolTip = L10n.t("侧边待办（⌥⌘T）", "EdgeTodo (⌥⌘T)")
         }
         let menu = NSMenu()
         menu.delegate = self
-        addItem(menu, "显示 / 隐藏", #selector(togglePanelAction))
-        addItem(menu, "打开提醒事项", #selector(openReminders))
-        addItem(menu, "重新加载", #selector(reloadAction))
+        addItem(menu, L10n.t("显示 / 隐藏", "Show / Hide"), #selector(togglePanelAction))
+        addItem(menu, L10n.t("打开提醒事项", "Open Reminders"), #selector(openReminders))
+        addItem(menu, L10n.t("重新加载", "Reload"), #selector(reloadAction))
         menu.addItem(.separator())
-        dockRightItem = addItem(menu, "停靠在屏幕右侧", #selector(dockRight))
-        dockLeftItem = addItem(menu, "停靠在屏幕左侧", #selector(dockLeft))
-        let displayItem = NSMenuItem(title: "提示条显示在", action: nil, keyEquivalent: "")
+        dockRightItem = addItem(menu, L10n.t("停靠在屏幕右侧", "Dock to Right Edge"), #selector(dockRight))
+        dockLeftItem = addItem(menu, L10n.t("停靠在屏幕左侧", "Dock to Left Edge"), #selector(dockLeft))
+        let displayItem = NSMenuItem(
+            title: L10n.t("提示条显示在", "Strip Shown On"), action: nil, keyEquivalent: ""
+        )
         displayItem.submenu = NSMenu()
         menu.addItem(displayItem)
         displayMenuItem = displayItem
-        addItem(menu, "提示条位置复位到中间", #selector(resetStripPosition))
+        addItem(menu, L10n.t("提示条位置复位到中间", "Reset Strip Position"), #selector(resetStripPosition))
         menu.addItem(.separator())
-        loginMenuItem = addItem(menu, "开机自动启动", #selector(toggleLogin))
+        loginMenuItem = addItem(menu, L10n.t("开机自动启动", "Launch at Login"), #selector(toggleLogin))
         menu.addItem(.separator())
-        addItem(menu, "退出侧边待办", #selector(quit))
+        let languageItem = NSMenuItem(
+            title: L10n.t("语言", "Language"), action: nil, keyEquivalent: ""
+        )
+        languageItem.submenu = NSMenu()
+        menu.addItem(languageItem)
+        languageMenuItem = languageItem
+        menu.addItem(.separator())
+        addItem(menu, L10n.t("退出侧边待办", "Quit EdgeTodo"), #selector(quit))
         statusItem.menu = menu
     }
 
@@ -331,6 +386,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         dockLeftItem?.state = side == "left" ? .on : .off
         loginMenuItem?.state = LoginItem.isEnabled ? .on : .off
         displayMenuItem?.submenu = makeDisplaySubmenu()
+        languageMenuItem?.submenu = makeLanguageSubmenu()
+    }
+
+    // MARK: 语言切换
+
+    private func makeLanguageSubmenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let current = L10n.language
+        for lang in AppLanguage.allCases {
+            let item = NSMenuItem(
+                title: lang.menuTitle, action: #selector(changeLanguage(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = lang.rawValue
+            item.state = (lang == current) ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func changeLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let lang = AppLanguage(rawValue: raw) else { return }
+        guard lang != L10n.language else { return }
+        L10n.language = lang
+        // 界面文案是在构建时写进视图的，所以整体重建一遍
+        let wasVisible = panel.isVisible
+        installPanelContent()
+        setupStatusItem()
+        if wasVisible { showPanel(focus: false, on: activeScreen) }
     }
 
     @objc private func togglePanelAction() { togglePanel() }
@@ -367,7 +453,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.autoenablesItems = false
 
         let hidden = hiddenDisplays
-        let all = NSMenuItem(title: "所有显示器", action: #selector(enableAllDisplays), keyEquivalent: "")
+        let all = NSMenuItem(
+            title: L10n.t("所有显示器", "All Displays"),
+            action: #selector(enableAllDisplays), keyEquivalent: ""
+        )
         all.target = self
         all.state = hidden.isEmpty ? .on : .off
         menu.addItem(all)
@@ -380,7 +469,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let base = screen.localizedName
             let index = (seen[base] ?? 0) + 1
             seen[base] = index
-            let title = (nameCount[base] ?? 0) > 1 ? "\(base)（\(index)）" : base
+            let title = (nameCount[base] ?? 0) > 1
+                ? L10n.t("\(base)（\(index)）", "\(base) (\(index))")
+                : base
 
             let item = NSMenuItem(title: title, action: #selector(toggleDisplay(_:)), keyEquivalent: "")
             item.target = self
@@ -426,6 +517,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.acceptsMouseMovedEvents = true
 
+        installPanelContent()
+        panel.setContentSize(panelSize)
+    }
+
+    /// 构建/重建面板内容。切换界面语言时整块换掉 —— 文案是构建时写进视图的，
+    /// 就地改要遍历每一个 label，重建更省事也不容易漏。
+    private func installPanelContent() {
+        controller = PanelController()
         controller.onRequestHide = { [weak self] in self?.hidePanel() }
         controller.onBusyChange = { [weak self] value in self?.busy = value }
 
@@ -436,7 +535,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         view.autoresizingMask = [.width, .height]
         container.addSubview(view)
         panel.contentView = container
-        panel.setContentSize(panelSize)
     }
 
     private func targetScreen() -> NSScreen {
@@ -711,22 +809,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        let right = NSMenuItem(title: "停靠在屏幕右侧", action: #selector(dockRight), keyEquivalent: "")
+        let right = NSMenuItem(
+            title: L10n.t("停靠在屏幕右侧", "Dock to Right Edge"),
+            action: #selector(dockRight), keyEquivalent: ""
+        )
         right.target = self
         right.state = side == "right" ? .on : .off
         menu.addItem(right)
 
-        let left = NSMenuItem(title: "停靠在屏幕左侧", action: #selector(dockLeft), keyEquivalent: "")
+        let left = NSMenuItem(
+            title: L10n.t("停靠在屏幕左侧", "Dock to Left Edge"),
+            action: #selector(dockLeft), keyEquivalent: ""
+        )
         left.target = self
         left.state = side == "left" ? .on : .off
         menu.addItem(left)
 
         menu.addItem(.separator())
-        let displayItem = NSMenuItem(title: "显示在", action: nil, keyEquivalent: "")
+        let displayItem = NSMenuItem(title: L10n.t("显示在", "Shown On"), action: nil, keyEquivalent: "")
         displayItem.submenu = makeDisplaySubmenu()
         menu.addItem(displayItem)
 
-        let reset = NSMenuItem(title: "位置复位到中间", action: #selector(resetStripPosition), keyEquivalent: "")
+        let reset = NSMenuItem(
+            title: L10n.t("位置复位到中间", "Reset Position"),
+            action: #selector(resetStripPosition), keyEquivalent: ""
+        )
         reset.target = self
         menu.addItem(reset)
 

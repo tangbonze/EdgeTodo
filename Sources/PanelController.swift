@@ -380,32 +380,36 @@ final class SeparatorLine: NSView {
 // MARK: - 时间展示
 
 enum DueFmt {
-    static let timeOnly: DateFormatter = {
+    private static func make(_ format: String, _ localeID: String) -> DateFormatter {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "HH:mm"
+        f.locale = Locale(identifier: localeID)
+        f.dateFormat = format
         return f
-    }()
+    }
 
-    static let shortDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月d日 HH:mm"
-        return f
-    }()
+    // 中英各备一份，切换语言时直接换引用，不用每次重建
+    private static let zhTime = make("HH:mm", "zh_CN")
+    private static let enTime = make("HH:mm", "en_US")
+    private static let zhShort = make("M月d日 HH:mm", "zh_CN")
+    private static let enShort = make("MMM d HH:mm", "en_US")
+    private static let zhFull = make("yyyy年M月d日 HH:mm", "zh_CN")
+    private static let enFull = make("MMM d, yyyy HH:mm", "en_US")
 
-    static let fullDate: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy年M月d日 HH:mm"
-        return f
-    }()
+    static var timeOnly: DateFormatter { L10n.isEnglish ? enTime : zhTime }
+    static var shortDate: DateFormatter { L10n.isEnglish ? enShort : zhShort }
+    static var fullDate: DateFormatter { L10n.isEnglish ? enFull : zhFull }
 
     static func text(_ date: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) { return "今天 " + timeOnly.string(from: date) }
-        if cal.isDateInTomorrow(date) { return "明天 " + timeOnly.string(from: date) }
-        if cal.isDateInYesterday(date) { return "昨天 " + timeOnly.string(from: date) }
+        if cal.isDateInToday(date) {
+            return L10n.t("今天 ", "Today ") + timeOnly.string(from: date)
+        }
+        if cal.isDateInTomorrow(date) {
+            return L10n.t("明天 ", "Tomorrow ") + timeOnly.string(from: date)
+        }
+        if cal.isDateInYesterday(date) {
+            return L10n.t("昨天 ", "Yesterday ") + timeOnly.string(from: date)
+        }
         if cal.isDate(date, equalTo: Date(), toGranularity: .year) {
             return shortDate.string(from: date)
         }
@@ -511,7 +515,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
     private func buildMicButton() {
         let mic = MicButton()
         mic.onTap = { [weak self] in self?.micTapped() }
-        mic.toolTip = "语音输入：点一下开始说，再点一下存成提醒"
+        mic.toolTip = L10n.t("语音输入：点一下开始说，再点一下存成提醒", "Voice input: click to start, click again to save")
         mic.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(mic)
         NSLayoutConstraint.activate([
@@ -573,7 +577,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         listButton.image = Look.symbol("checklist", size: 11, weight: .semibold)
         listButton.imagePosition = .imageLeading
         listButton.imageHugsTitle = true
-        listButton.attributedTitle = listChipTitle("提醒")
+        listButton.attributedTitle = listChipTitle(L10n.t("提醒", "Reminders"))
         listButton.target = self
         listButton.action = #selector(showListMenu(_:))
         listButton.horizontalPadding = 10
@@ -640,7 +644,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 13)
         field.textColor = .labelColor
-        field.placeholderString = "写点什么，回车存进提醒事项"
+        field.placeholderString = L10n.t("写点什么，回车存进提醒事项", "Type something, Return to save")
         field.delegate = self
         field.cell?.usesSingleLineMode = true
         field.translatesAutoresizingMaskIntoConstraints = false
@@ -727,7 +731,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         voiceBaseText = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         isVoiceListening = true
         updateMic()
-        field.placeholderString = "正在听…"
+        field.placeholderString = L10n.t("正在听…", "Listening…")
         onBusyChange?(true)                // 说话时先别自动收起面板
         voice.onPartial = { [weak self] text in self?.applyVoice(text) }
         voice.onError = { [weak self] message in
@@ -764,7 +768,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         voice.onFinish = nil
         updateMic()
         onBusyChange?(false)
-        draftField?.placeholderString = "写点什么，回车存进提醒事项"
+        draftField?.placeholderString = L10n.t("写点什么，回车存进提醒事项", "Type something, Return to save")
         guard let field = draftField else { return }
         let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
@@ -787,15 +791,15 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         voice.stop()
         updateMic()
         onBusyChange?(false)
-        draftField?.placeholderString = "写点什么，回车存进提醒事项"
+        draftField?.placeholderString = L10n.t("写点什么，回车存进提醒事项", "Type something, Return to save")
     }
 
     private func updateMic() {
         guard let mic = micButton else { return }
         mic.isActive = isVoiceListening
         mic.toolTip = isVoiceListening
-            ? "正在听…再点一下结束并存成提醒"
-            : "语音输入：点一下开始说，再点一下存成提醒"
+            ? L10n.t("正在听…再点一下结束并存成提醒", "Listening… click again to finish and save")
+            : L10n.t("语音输入：点一下开始说，再点一下存成提醒", "Voice input: click to start, click again to save")
     }
 
     private func updateMicVisibility() {
@@ -814,7 +818,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
             voice.onFinish = nil
             updateMic()
             onBusyChange?(false)
-            field.placeholderString = "写点什么，回车存进提醒事项"
+            field.placeholderString = L10n.t("写点什么，回车存进提醒事项", "Type something, Return to save")
         }
         let raw = field.stringValue
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -916,13 +920,13 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         inner.addArrangedSubview(badge)
         inner.setCustomSpacing(12, after: badge)
 
-        let title = NSTextField(labelWithString: "都清完了")
+        let title = NSTextField(labelWithString: L10n.t("都清完了", "All clear"))
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.textColor = .labelColor
         title.alignment = .center
         inner.addArrangedSubview(title)
 
-        let tip = NSTextField(labelWithString: "点一下空白处，直接开始写")
+        let tip = NSTextField(labelWithString: L10n.t("点一下空白处，直接开始写", "Click anywhere to start writing"))
         tip.font = .systemFont(ofSize: 11)
         tip.textColor = .secondaryLabelColor
         tip.alignment = .center
@@ -951,25 +955,28 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         inner.addArrangedSubview(badge)
         inner.setCustomSpacing(12, after: badge)
 
-        let title = NSTextField(labelWithString: "需要访问系统「提醒事项」")
+        let title = NSTextField(labelWithString: L10n.t("需要访问系统「提醒事项」", "Needs access to Reminders"))
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.alignment = .center
         inner.addArrangedSubview(title)
 
-        let tip = NSTextField(wrappingLabelWithString: "允许后，这里每一条都会实时读写提醒事项，并随 iCloud 同步到 iPhone。")
+        let tip = NSTextField(wrappingLabelWithString: L10n.t(
+            "允许后，这里每一条都会实时读写提醒事项，并随 iCloud 同步到 iPhone。",
+            "Reads and writes Reminders live, and syncs to your iPhone via iCloud."
+        ))
         tip.font = .systemFont(ofSize: 11)
         tip.textColor = .secondaryLabelColor
         tip.alignment = .center
         tip.preferredMaxLayoutWidth = 250
         inner.addArrangedSubview(tip)
 
-        let request = FilledButton(title: "允许访问", target: self, action: #selector(requestAccess))
+        let request = FilledButton(title: L10n.t("允许访问", "Allow Access"), target: self, action: #selector(requestAccess))
         request.translatesAutoresizingMaskIntoConstraints = false
         inner.addArrangedSubview(request)
         inner.setCustomSpacing(14, after: tip)
 
         let settings = SoftButton(radius: 9, rest: .clear, hover: Look.tint(0.08))
-        settings.title = "打开系统设置"
+        settings.title = L10n.t("打开系统设置", "Open System Settings")
         settings.font = .systemFont(ofSize: 11)
         settings.contentTintColor = .secondaryLabelColor
         settings.target = self
@@ -1002,11 +1009,11 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         let now = Date()
         // 只用通用条目，不放任何真实客户 / 学校 / 产品名，避免截图外泄隐私
         let samples: [(String, Date?)] = [
-            ("整理本周的会议纪要", now.addingTimeInterval(3600)),
-            ("回复客户关于报价的邮件", cal.date(byAdding: .day, value: 1, to: now)),
-            ("提交上个月的报销单", nil),
-            ("确认下周的交付排期", now.addingTimeInterval(-7200)),
-            ("预约周五的体检", cal.date(byAdding: .day, value: 3, to: now))
+            (L10n.t("整理本周的会议纪要", "Tidy up this week's meeting notes"), now.addingTimeInterval(3600)),
+            (L10n.t("回复客户关于报价的邮件", "Reply to the client's quote email"), cal.date(byAdding: .day, value: 1, to: now)),
+            (L10n.t("提交上个月的报销单", "Submit last month's expense report"), nil),
+            (L10n.t("确认下周的交付排期", "Confirm next week's delivery schedule"), now.addingTimeInterval(-7200)),
+            (L10n.t("预约周五的体检", "Book Friday's checkup"), cal.date(byAdding: .day, value: 3, to: now))
         ]
         return samples.map { title, due in
             let r = EKReminder(eventStore: ek)
@@ -1021,18 +1028,18 @@ final class PanelController: NSObject, NSTextFieldDelegate {
     // MARK: 刷新
 
     func refresh() {
-        listButton.attributedTitle = listChipTitle(store.selectedList?.title ?? "提醒事项")
+        listButton.attributedTitle = listChipTitle(store.selectedList?.title ?? L10n.t("提醒事项", "Reminders"))
         listButton.isEnabled = !store.lists.isEmpty
         listButton.invalidateIntrinsicContentSize()
         let shown = demoMode ? Self.demoItems().count : store.items.count
         countLabel.stringValue = (store.authGranted || demoMode) && shown > 0 ? "\(shown)" : ""
         if let field = draftField {
             if isVoiceListening {
-                field.placeholderString = "正在听…"
+                field.placeholderString = L10n.t("正在听…", "Listening…")
             } else {
                 field.placeholderString = store.lastError == nil
-                    ? "写点什么，回车存进提醒事项"
-                    : "⚠︎ 和提醒事项同步失败"
+                    ? L10n.t("写点什么，回车存进提醒事项", "Type something, Return to save")
+                    : L10n.t("⚠︎ 和提醒事项同步失败", "⚠︎ Reminders sync failed")
             }
         }
 
@@ -1225,7 +1232,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         box.translatesAutoresizingMaskIntoConstraints = false
         overlay.addSubview(box)
 
-        let title = NSTextField(labelWithString: "设置提醒")
+        let title = NSTextField(labelWithString: L10n.t("设置提醒", "Set Reminder"))
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(title)
@@ -1252,7 +1259,12 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         chips.orientation = .horizontal
         chips.spacing = 4
         chips.translatesAutoresizingMaskIntoConstraints = false
-        let chipTitles = ["今天 18:00", "今晚 20:00", "明早 09:00", "下周一"]
+        let chipTitles = [
+            L10n.t("今天 18:00", "Today 6pm"),
+            L10n.t("今晚 20:00", "Tonight 8pm"),
+            L10n.t("明早 09:00", "Tmrw 9am"),
+            L10n.t("下周一", "Next Mon")
+        ]
         for (i, t) in chipTitles.enumerated() {
             let b = SoftButton(radius: 8, rest: Look.tint(0.07), hover: Look.tint(0.13))
             b.title = t
@@ -1267,7 +1279,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         box.addSubview(chips)
 
         let clear = SoftButton(radius: 8, rest: .clear, hover: Look.tint(0.08))
-        clear.title = "清除提醒"
+        clear.title = L10n.t("清除提醒", "Clear Reminder")
         clear.font = .systemFont(ofSize: 11)
         clear.contentTintColor = .systemRed
         clear.target = self
@@ -1276,7 +1288,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         box.addSubview(clear)
 
         let cancel = SoftButton(radius: 9, rest: Look.tint(0.08), hover: Look.tint(0.14))
-        cancel.title = "取消"
+        cancel.title = L10n.t("取消", "Cancel")
         cancel.font = .systemFont(ofSize: 12)
         cancel.contentTintColor = .labelColor
         cancel.target = self
@@ -1284,7 +1296,7 @@ final class PanelController: NSObject, NSTextFieldDelegate {
         cancel.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(cancel)
 
-        let confirm = FilledButton(title: "确定", target: self, action: #selector(editorConfirm))
+        let confirm = FilledButton(title: L10n.t("确定", "OK"), target: self, action: #selector(editorConfirm))
         confirm.keyEquivalent = "\r"
         confirm.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(confirm)
@@ -1478,16 +1490,16 @@ final class TodoRowView: NSView {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        let remindItem = NSMenuItem(title: "设置提醒…", action: #selector(remind), keyEquivalent: "")
+        let remindItem = NSMenuItem(title: L10n.t("设置提醒…", "Set Reminder…"), action: #selector(remind), keyEquivalent: "")
         remindItem.target = self
         menu.addItem(remindItem)
 
-        let clear = NSMenuItem(title: "清除提醒", action: #selector(clearDue), keyEquivalent: "")
+        let clear = NSMenuItem(title: L10n.t("清除提醒", "Clear Reminder"), action: #selector(clearDue), keyEquivalent: "")
         clear.target = self
         clear.isEnabled = item.due != nil
         menu.addItem(clear)
 
-        let move = NSMenuItem(title: "移动到", action: nil, keyEquivalent: "")
+        let move = NSMenuItem(title: L10n.t("移动到", "Move to"), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         for list in TodoStore.shared.lists {
             let mi = NSMenuItem(title: list.title, action: #selector(moveToList(_:)), keyEquivalent: "")
@@ -1500,11 +1512,11 @@ final class TodoRowView: NSView {
 
         menu.addItem(.separator())
 
-        let open = NSMenuItem(title: "在提醒事项中打开", action: #selector(openApp), keyEquivalent: "")
+        let open = NSMenuItem(title: L10n.t("在提醒事项中打开", "Open in Reminders"), action: #selector(openApp), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
 
-        let del = NSMenuItem(title: "删除", action: #selector(deleteItem), keyEquivalent: "")
+        let del = NSMenuItem(title: L10n.t("删除", "Delete"), action: #selector(deleteItem), keyEquivalent: "")
         del.target = self
         menu.addItem(del)
         return menu

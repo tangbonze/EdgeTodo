@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "侧边待办";
+"CFBundleName" = "侧边待办";
+"NSMicrophoneUsageDescription" = "侧边待办用麦克风接收你的语音，转成待办文字。音频只在本机识别，不上传。";
+"NSRemindersFullAccessUsageDescription" = "侧边待办需要读取和写入你的提醒事项，以便在屏幕边缘直接查看、新增和设置提醒，并与 iCloud 保持同步。";
+"NSRemindersUsageDescription" = "侧边待办需要读取和写入你的提醒事项，以便在屏幕边缘直接查看、新增和设置提醒，并与 iCloud 保持同步。";
+"NSSpeechRecognitionUsageDescription" = "侧边待办会用系统自带的本地语音识别模型，把你说的话转成待办文字。";

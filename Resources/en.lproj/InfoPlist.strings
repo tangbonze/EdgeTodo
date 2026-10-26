@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "EdgeTodo";
+"CFBundleName" = "EdgeTodo";
+"NSMicrophoneUsageDescription" = "EdgeTodo uses the microphone to turn your speech into todo text. Audio is recognized on-device and is never uploaded.";
+"NSRemindersFullAccessUsageDescription" = "EdgeTodo needs to read and write your Reminders so you can view, add, and schedule reminders right from the screen edge, staying in sync with iCloud.";
+"NSRemindersUsageDescription" = "EdgeTodo needs to read and write your Reminders so you can view, add, and schedule reminders right from the screen edge, staying in sync with iCloud.";
+"NSSpeechRecognitionUsageDescription" = "EdgeTodo uses the built-in on-device speech recognition model to turn what you say into todo text.";

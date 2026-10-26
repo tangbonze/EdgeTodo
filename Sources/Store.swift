@@ -8,7 +8,7 @@ struct TodoItem: Identifiable, Equatable {
     let reminder: EKReminder
 
     var id: String { reminder.calendarItemIdentifier }
-    var title: String { reminder.title ?? "（无标题）" }
+    var title: String { reminder.title ?? L10n.t("（无标题）", "(No title)") }
     var isCompleted: Bool { reminder.isCompleted }
 
     var due: Date? {
@@ -173,7 +173,10 @@ final class TodoStore {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         guard let cal = selectedList else {
-            lastError = "没有可用的列表，请先在「提醒事项」中建一个"
+            lastError = L10n.t(
+                "没有可用的列表，请先在「提醒事项」中建一个",
+                "No lists available — create one in Reminders first"
+            )
             notify()
             return false
         }

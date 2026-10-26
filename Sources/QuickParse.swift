@@ -115,7 +115,7 @@ enum QuickParse {
             return Result(title: raw.trimmingCharacters(in: .whitespacesAndNewlines), due: nil)
         }
 
-        let fallbackTitle = title.isEmpty ? "新提醒" : title
+        let fallbackTitle = title.isEmpty ? L10n.t("新提醒", "New Reminder") : title
 
         // 相对时间直接按「现在 + N 分钟」算
         if let minutes = relativeMinutes {

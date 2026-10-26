@@ -38,12 +38,19 @@ Get the latest `EdgeTodo-*.dmg` from [Releases](https://github.com/tangbonze/Edg
 | `ESC` | Close the reminder editor / dismiss the draft row, then hide the panel |
 | Drag the grey handle | Move it up and down along the edge (remembered per display) |
 | **Right-click the handle** | Dock to the left / right edge, choose which display, reset position to center |
-| Menu bar icon | Show/hide, dock left/right, strip display, reset position, launch at login, quit |
+| Menu bar icon | Show/hide, dock left/right, strip display, reset position, launch at login, **switch interface language**, quit |
 | **Click the mic at the bottom** | Start dictating: creates a new todo and turns your speech into text live |
 | Pause ~2.5 s while speaking / click the mic again | Stops dictation automatically and saves it as a reminder |
 | Press `Return` while dictating | Saves immediately and turns the mic off |
 
 > The panel is a **non-activating window**: once the mouse moves into the panel body (after about 0.15 s) it takes over the keyboard, so a single click starts typing — no activation click needed first. Merely passing by the edge won't steal focus.
+
+### Interface language
+
+The interface comes in **English** and **简体中文**, and follows your system language by default.
+
+- Menu bar icon → **Language** lets you pick Follow System / 简体中文 / English; the interface rebuilds immediately, no restart needed
+- System-level names and permission prompts are localized too: the app shows up as `EdgeTodo` on an English system and 「侧边待办」on a Chinese one, and the permission descriptions follow the system language
 
 ### Multiple displays
 
@@ -132,3 +139,10 @@ Environment variables work too (run `dist/EdgeTodo.app/Contents/MacOS/EdgeTodo` 
 - `EDGETODO_SHOW=1` — expand the panel on launch
 - `EDGETODO_DEMO=1` — fake data
 - `EDGETODO_NO_GLASS=1` — force the macOS 13–25 blur fallback, so you can check how it looks on older systems from a new one
+- `EDGETODO_DUMP=1` — print every UI string (menu items included) to stderr, handy for checking that no translation is missing
+
+You can also set the interface language from the shell instead of the menu:
+
+```bash
+defaults write com.tangbonze.edgetodo appLanguage -string english   # system / chinese / english
+```

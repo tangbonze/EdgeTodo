@@ -38,6 +38,10 @@ echo "    ok（警告 $(grep -c 'warning:' build/compile.log || true) 条，已�
 echo "==> 组装 bundle"
 cp Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+# 本地化资源（InfoPlist.strings：中英文的显示名与权限说明）
+if [ -d Resources ]; then
+  cp -R Resources/. "$APP/Contents/Resources/"
+fi
 if [ -f AppIcon.icns ]; then
   cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 else

@@ -34,13 +34,13 @@ final class VoiceInput {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             guard let self = self else { return }
             guard status == .authorized else {
-                DispatchQueue.main.async { self.onError?("没拿到语音识别权限") }
+                DispatchQueue.main.async { self.onError?(L10n.t("没拿到语音识别权限", "Speech recognition permission not granted")) }
                 return
             }
             requestMicPermission { granted in
                 DispatchQueue.main.async {
                     guard granted else {
-                        self.onError?("没拿到麦克风权限")
+                        self.onError?(L10n.t("没拿到麦克风权限", "Microphone permission not granted"))
                         return
                     }
                     self.beginSession()
@@ -71,7 +71,7 @@ final class VoiceInput {
     private func beginSession() {
         guard let recognizer = SFSpeechRecognizer(locale: Self.preferredLocale),
               recognizer.isAvailable else {
-            onError?("这台机器的语音识别暂时不可用")
+            onError?(L10n.t("这台机器的语音识别暂时不可用", "Speech recognition is unavailable on this Mac"))
             return
         }
 
@@ -89,7 +89,7 @@ final class VoiceInput {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else {
-            onError?("没找到可用的麦克风")
+            onError?(L10n.t("没找到可用的麦克风", "No usable microphone found"))
             return
         }
         input.removeTap(onBus: 0)
@@ -103,7 +103,7 @@ final class VoiceInput {
         } catch {
             input.removeTap(onBus: 0)
             self.request = nil
-            onError?("麦克风打不开")
+            onError?(L10n.t("麦克风打不开", "Could not start the microphone"))
             return
         }
 
