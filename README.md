@@ -63,7 +63,7 @@
 
 ### 输入行里可以直接写时间
 
-在标题里夹一句自然语言，会自动拆成「标题 + 提醒时间」：
+在标题里夹一句自然语言，会自动拆成「标题 + 提醒时间」。**中英文都认**，跟界面语言无关：
 
 ```
 明天 9:00 交报价单     → 标题「交报价单」，明天 09:00 提醒
@@ -76,9 +76,25 @@
 十分钟之后 回电话      → 相对时间：从现在 + 10 分钟
 ```
 
-解析出的提醒时间会实时显示在输入行右侧，不满意就右键条目改。语音输入走的是同一套解析：说「提醒我明天十点开会」，会得到标题「开会」+ 明天 10:00 的提醒，「提醒我 / 帮我记一下」这类口头语会被自动去掉。
+英文写法一样能拆：
 
-> **注意**：自然语言时间解析目前**只认中文**。界面切成英文只是界面变英文，`tomorrow 9am` 这类英文写法不会被解析，会原样留在标题里。
+```
+tomorrow 9am standup           → 「standup」，明天 09:00
+Standup tomorrow at 9:30am     → 「Standup」，明天 09:30
+friday 3pm report              → 「report」，本周五 15:00
+next monday 2pm 1:1 with Sam   → 「1:1 with Sam」，下周一 14:00
+tonight 8pm dinner             → 「dinner」，今天 20:00
+lunch tomorrow noon            → 「lunch」，明天 12:00
+in 10 minutes call back        → 「call back」，从现在 + 10 分钟
+in half an hour coffee         → 从现在 + 30 分钟
+9 o'clock gym                  → 「gym」，今天 09:00（已过则顺延到明天）
+```
+
+支持的英文写法：`today / tomorrow / tonight / the day after tomorrow / next week`；星期 `monday…sunday`（含 `mon / tue / wed / thu / fri / sat / sun`，可带 `next` / `this` / `on`）；时刻 `9am / 9:30pm / 9 o'clock / at 9`；`noon / midnight`；时段 `morning / afternoon / evening / night`；相对时间 `in 10 minutes / in 2 hours / in half an hour`；以及 `remind me to …` 这类口头语。
+
+中英还能混着写（`明天 9am 开会` 也会得到明天 09:00）。摘时间词只认时间词本身，标题里别的英文不受影响 —— `开个 Zoom meeting` 会原样保留，不会被当成时间。
+
+解析出的提醒时间会实时显示在输入行右侧，不满意就右键条目改。语音输入走的是同一套解析：说「提醒我明天十点开会」，会得到标题「开会」+ 明天 10:00 的提醒，「提醒我 / 帮我记一下」这类口头语会被自动去掉。
 
 ## 数据与权限
 

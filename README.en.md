@@ -63,7 +63,7 @@ The interface comes in **English** and **简体中文**, and follows your system
 
 ### Type the time right into the input row
 
-Put a natural-language expression in the title and it's split into "title + reminder time":
+Put a natural-language expression in the title and it's split into "title + reminder time". **Both Chinese and English work**, regardless of the UI language:
 
 ```
 明天 9:00 交报价单     → title「交报价单」, reminder tomorrow 09:00
@@ -76,9 +76,25 @@ Put a natural-language expression in the title and it's split into "title + remi
 十分钟之后 回电话      → relative: now + 10 minutes
 ```
 
-The parsed time shows up live on the right side of the input row; if it's wrong, right-click the item and fix it. Voice input uses the same parser: say "提醒我明天十点开会" and you get the title「开会」plus a reminder for tomorrow 10:00 — filler phrases like「提醒我」/「帮我记一下」are stripped automatically.
+English input parses the same way:
 
-> **Note**: the natural-language parser is **Chinese-only** right now. The Chinese examples above are literal input; English phrases such as "tomorrow 9am" are not parsed and will stay in the title.
+```
+tomorrow 9am standup           → title "standup", tomorrow 09:00
+Standup tomorrow at 9:30am     → title "Standup", tomorrow 09:30
+friday 3pm report              → title "report", this Friday 15:00
+next monday 2pm 1:1 with Sam   → title "1:1 with Sam", next Monday 14:00
+tonight 8pm dinner             → title "dinner", today 20:00
+lunch tomorrow noon            → title "lunch", tomorrow 12:00
+in 10 minutes call back        → title "call back", now + 10 minutes
+in half an hour coffee         → now + 30 minutes
+9 o'clock gym                  → title "gym", today 09:00 (rolls to tomorrow if already past)
+```
+
+Supported English forms: `today / tomorrow / tonight / the day after tomorrow / next week`; weekdays `monday…sunday` (plus `mon / tue / wed / thu / fri / sat / sun`, optionally with `next` / `this` / `on`); clock times `9am / 9:30pm / 9 o'clock / at 9`; `noon / midnight`; periods `morning / afternoon / evening / night`; relative `in 10 minutes / in 2 hours / in half an hour`; and fillers such as `remind me to …`.
+
+Mixing is fine too (`明天 9am 开会` gives tomorrow 09:00). Only time words are stripped, so other English in the title is left alone — `开个 Zoom meeting` stays intact.
+
+The parsed time shows up live on the right side of the input row; if it's wrong, right-click the item and fix it. Voice input uses the same parser: the Chinese examples above are literal speech input, and filler phrases like「提醒我」/「帮我记一下」/ "remind me to" are stripped automatically.
 
 ## Data & permissions
 

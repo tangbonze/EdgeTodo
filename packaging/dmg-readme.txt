@@ -11,7 +11,8 @@ A todo list that lives on your screen edge
 用法
   · 鼠标滑到屏幕边缘的灰色小拉手，面板弹出；移开自动收起
   · 点窗口空白处直接打字，回车建成待办
-  · 标题里写时间会自动解析，例如「明天 9:00 交报价单」
+  · 标题里写时间会自动解析，例如「明天 9:00 交报价单」，
+    英文也可以：tomorrow 9am standup
   · ⌥⌘T 显示 / 隐藏面板
   · 右键条目：设置提醒、移动列表、删除
   · 右键灰色拉手：切换左右边缘、选择显示在哪块屏幕
@@ -43,8 +44,8 @@ Usage
   · Hover the small grey handle at the screen edge and the panel slides out;
     it hides again when the mouse leaves
   · Click any blank spot in the panel and type; press Return to create the todo
-  · Put a time in the title and it is parsed automatically, for example
-    「明天 9:00 交报价单」 (natural-language parsing is Chinese-only for now)
+  · Put a time in the title and it is parsed automatically, in Chinese
+    「明天 9:00 交报价单」 or in English "tomorrow 9am standup"
   · ⌥⌘T shows / hides the panel
   · Right-click an item: set reminder, move to another list, delete
   · Right-click the grey handle: dock to the left or right edge,
