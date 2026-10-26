@@ -90,6 +90,22 @@ final class StripWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+// MARK: - 显示器标识
+
+extension NSScreen {
+    /// 稳定的显示器标识：优先用 ColorSync 的 UUID，拔插、重启、换坞站之后
+    /// 仍然能对上同一台显示器；拿不到时退回 displayID，最后退回名字。
+    var displayUUID: String {
+        let number = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        if let displayID = number?.uint32Value,
+           let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() {
+            return (CFUUIDCreateString(nil, uuid) as String).uppercased()
+        }
+        if let displayID = number?.uint32Value { return "display-\(displayID)" }
+        return "name-\(localizedName)"
+    }
+}
+
 // MARK: - 开机自启
 
 enum LoginItem {
@@ -145,7 +161,10 @@ func edgeTodoHotKeyHandler(
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var panel: PanelWindow!
-    private var hotWindows: [NSWindow] = []
+    /// 提示条窗口，按显示器 UUID 索引：一块屏幕一条，互不干扰
+    private var stripWindows: [String: StripWindow] = [:]
+    /// 当前面板所在的屏幕；「从哪里激活就在哪里显示」靠它记住来源
+    private var activeScreen: NSScreen?
     private var hotKeyRef: EventHotKeyRef?
     private var ticker: Timer?
     private var outsideSince: Date?
@@ -172,15 +191,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "dockSide") }
     }
 
-    /// 提示条在边缘上的相对位置：0 = 最上，1 = 最下
-    private var stripFraction: CGFloat {
-        get {
-            guard UserDefaults.standard.object(forKey: "stripFraction") != nil else { return 0.5 }
-            return CGFloat(min(max(UserDefaults.standard.double(forKey: "stripFraction"), 0), 1))
+    /// 不显示提示条的显示器（UUID）。空集合 = 所有显示器都显示，
+    /// 这样新插上的显示器默认就是可见的，不用额外配置。
+    private var hiddenDisplays: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "hiddenDisplays") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "hiddenDisplays") }
+    }
+
+    /// 真正要显示提示条的屏幕
+    private var visibleScreens: [NSScreen] {
+        let hidden = hiddenDisplays
+        let screens = NSScreen.screens.filter { !hidden.contains($0.displayUUID) }
+        return screens.isEmpty ? NSScreen.screens : screens   // 保底：至少留一块
+    }
+
+    /// 提示条在边缘上的相对位置：0 = 最下，1 = 最上（每块屏幕各存一份）
+    /// 注意 NSScreen 的 y 轴向上，所以数值越大越靠上
+    private func stripFraction(for screen: NSScreen) -> CGFloat {
+        let key = "stripFraction." + screen.displayUUID
+        let store = UserDefaults.standard
+        if store.object(forKey: key) != nil {
+            return CGFloat(min(max(store.double(forKey: key), 0), 1))
         }
-        set {
-            UserDefaults.standard.set(Double(min(max(newValue, 0), 1)), forKey: "stripFraction")
+        // 老版本只有一个全局值，迁移时沿用它
+        if store.object(forKey: "stripFraction") != nil {
+            return CGFloat(min(max(store.double(forKey: "stripFraction"), 0), 1))
         }
+        return 0.5
+    }
+
+    private func setStripFraction(_ value: CGFloat, for screen: NSScreen) {
+        UserDefaults.standard.set(
+            Double(min(max(value, 0), 1)),
+            forKey: "stripFraction." + screen.displayUUID
+        )
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -190,6 +234,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         setupStatusItem()
         setupPanel()
+        activeScreen = targetScreen()
+        // 上次退出时若有显示器没接上，这里把它的记录清掉
+        let live = Set(NSScreen.screens.map { $0.displayUUID })
+        let pruned = hiddenDisplays.intersection(live)
+        if pruned != hiddenDisplays { hiddenDisplays = pruned }
         rebuildHotZones()
         registerHotKey()
         startHoverTicker()
@@ -239,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var dockRightItem: NSMenuItem?
     private var dockLeftItem: NSMenuItem?
     private var loginMenuItem: NSMenuItem?
+    private var displayMenuItem: NSMenuItem?
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -256,6 +306,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         dockRightItem = addItem(menu, "停靠在屏幕右侧", #selector(dockRight))
         dockLeftItem = addItem(menu, "停靠在屏幕左侧", #selector(dockLeft))
+        let displayItem = NSMenuItem(title: "提示条显示在", action: nil, keyEquivalent: "")
+        displayItem.submenu = NSMenu()
+        menu.addItem(displayItem)
+        displayMenuItem = displayItem
         addItem(menu, "提示条位置复位到中间", #selector(resetStripPosition))
         menu.addItem(.separator())
         loginMenuItem = addItem(menu, "开机自动启动", #selector(toggleLogin))
@@ -276,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         dockRightItem?.state = side == "right" ? .on : .off
         dockLeftItem?.state = side == "left" ? .on : .off
         loginMenuItem?.state = LoginItem.isEnabled ? .on : .off
+        displayMenuItem?.submenu = makeDisplaySubmenu()
     }
 
     @objc private func togglePanelAction() { togglePanel() }
@@ -285,10 +340,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func dockLeft() { side = "left"; rebuildHotZones() }
     @objc private func toggleLogin() { LoginItem.setEnabled(!LoginItem.isEnabled) }
     @objc private func quit() { NSApp.terminate(nil) }
-    @objc private func screensChanged() { rebuildHotZones() }
+
+    @objc private func screensChanged() {
+        // 面板所在的屏幕被拔掉了，就直接收起，别留在不存在的坐标上
+        if let sc = activeScreen, !NSScreen.screens.contains(where: { $0.displayUUID == sc.displayUUID }) {
+            activeScreen = nil
+            panel?.orderOut(nil)
+        }
+        // 顺便清掉已经不存在的显示器记录，否则「关到一条不剩」的判定会被旧 UUID 干扰
+        let live = Set(NSScreen.screens.map { $0.displayUUID })
+        let pruned = hiddenDisplays.intersection(live)
+        if pruned != hiddenDisplays { hiddenDisplays = pruned }
+        rebuildHotZones()
+    }
 
     @objc private func resetStripPosition() {
-        stripFraction = 0.5
+        for screen in visibleScreens { setStripFraction(0.5, for: screen) }
+        rebuildHotZones()
+    }
+
+    // MARK: 显示器选择
+
+    /// 「提示条显示在」子菜单：所有显示器 + 逐块勾选（可多选）
+    private func makeDisplaySubmenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let hidden = hiddenDisplays
+        let all = NSMenuItem(title: "所有显示器", action: #selector(enableAllDisplays), keyEquivalent: "")
+        all.target = self
+        all.state = hidden.isEmpty ? .on : .off
+        menu.addItem(all)
+        menu.addItem(.separator())
+
+        let screens = NSScreen.screens
+        let nameCount = Dictionary(grouping: screens, by: { $0.localizedName }).mapValues { $0.count }
+        var seen: [String: Int] = [:]
+        for screen in screens {
+            let base = screen.localizedName
+            let index = (seen[base] ?? 0) + 1
+            seen[base] = index
+            let title = (nameCount[base] ?? 0) > 1 ? "\(base)（\(index)）" : base
+
+            let item = NSMenuItem(title: title, action: #selector(toggleDisplay(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = screen.displayUUID
+            item.state = hidden.contains(screen.displayUUID) ? .off : .on
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func enableAllDisplays() {
+        hiddenDisplays = []
+        rebuildHotZones()
+    }
+
+    @objc private func toggleDisplay(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        var hidden = hiddenDisplays
+        if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) }
+        // 不允许把所有显示器都关掉：关到一条不剩时自动恢复全部，
+        // 否则用户会以为程序坏了，且没有入口再打开
+        if hidden.count >= NSScreen.screens.count { hidden.removeAll() }
+        hiddenDisplays = hidden
         rebuildHotZones()
     }
 
@@ -337,19 +452,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if panel.frame.contains(NSEvent.mouseLocation) { suppressHover = true }
             hidePanel()
         } else {
-            showPanel(focus: true)
+            // 快捷键/菜单栏唤起：没有具体的提示条来源，就跟着鼠标所在屏幕
+            showPanel(focus: true, on: targetScreen())
         }
     }
 
-    func showPanel(focus: Bool) {
+    /// - Parameter screen: 从哪块屏幕激活的，面板就出现在哪块屏幕上
+    func showPanel(focus: Bool, on screen: NSScreen? = nil) {
         outsideSince = nil
-        let screen = targetScreen()
-        let vf = screen.visibleFrame
+        let sc = screen ?? activeScreen ?? targetScreen()
+        activeScreen = sc
+        let vf = sc.visibleFrame
         let size = panelSize
         let isRight = side == "right"
 
         // 面板跟着提示条走：垂直居中对齐提示条，超出可视区再夹回来
-        let strip = stripRect(for: screen)
+        let strip = stripRect(for: sc)
         let wanted = strip.midY - size.height / 2
         let y = min(max(vf.minY + 12, wanted), vf.maxY - size.height - 12)
         let x = isRight ? vf.maxX - size.width : vf.minX
@@ -373,7 +491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         store.reload()
-        setStripsVisible(false)   // 面板盖住拉手，别让它叠在玻璃上
+        syncStripVisibility()   // 面板盖住的那块屏幕的拉手收起来，别叠在玻璃上
     }
 
     /// 边缘拉手窗口的显隐（悬停判定靠轮询，不依赖窗口）
@@ -387,8 +505,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setStripsVisible(_ visible: Bool) {
-        for w in hotWindows {
+        for (_, w) in stripWindows {
             if visible { w.orderFrontRegardless() } else { w.orderOut(nil) }
+        }
+    }
+
+    /// 只藏掉面板所在那块屏幕的提示条（它被玻璃卡片盖住了），
+    /// 其他屏幕的提示条留着 —— 这样在其他屏幕上一点就能把面板搬过去。
+    private func syncStripVisibility() {
+        let coveredKey: String? = panel.isVisible ? activeScreen?.displayUUID : nil
+        for (key, win) in stripWindows {
+            if key == coveredKey {
+                win.orderOut(nil)
+            } else {
+                win.orderFrontRegardless()
+            }
         }
     }
 
@@ -401,7 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.cancelDraftIfNeeded()   // 收起时把没写完的草稿存下
         panel.makeFirstResponder(nil)
         panel.orderOut(nil)
-        setStripsVisible(true)
+        syncStripVisibility()
         lastHiddenAt = Date()
     }
 
@@ -422,18 +553,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 可拖动范围：上下各留 stripMargin
         let low = vf.minY + stripMargin
         let high = max(low, vf.maxY - h - stripMargin)
-        let y = low + stripFraction * (high - low)
+        let y = low + stripFraction(for: screen) * (high - low)
         return NSRect(x: x, y: y, width: edgeStripWidth, height: h)
     }
 
-    /// 拖动时把屏幕坐标换算成新的相对位置
+    /// 拖动时把屏幕坐标换算成新的相对位置（只作用于被拖动的那块屏幕）
     private func setStripPosition(mouseY: CGFloat, on screen: NSScreen) {
         let vf = screen.visibleFrame
         let h = min(edgeStripHeight, vf.height - 120)
         let low = vf.minY + stripMargin
         let high = max(low, vf.maxY - h - stripMargin)
         guard high > low else { return }
-        stripFraction = (mouseY - h / 2 - low) / (high - low)
+        setStripFraction((mouseY - h / 2 - low) / (high - low), for: screen)
     }
 
     private func tick() {
@@ -442,14 +573,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         guard let sc = screen else { return }
         let strip = stripRect(for: sc)
+        // 这块屏幕上到底有没有提示条（用户可能把它关掉了，几何位置就不该再生效）
+        let stripActive = !hiddenDisplays.contains(sc.displayUUID)
+        let onStrip = stripActive && strip.contains(mouse)
 
         if panel.isVisible {
-            // 面板本身 + 边缘热区都算"仍在里面"，否则会隐藏又被热区立刻唤出
-            if panel.frame.insetBy(dx: -1, dy: -1).contains(mouse) || strip.contains(mouse) {
+            // 鼠标停到「另一块」屏幕的提示条上 → 面板跟着搬过去
+            if onStrip, activeScreen?.displayUUID != sc.displayUUID {
+                showPanel(focus: false, on: sc)
+                return
+            }
+            // 面板本身 + 本屏边缘热区都算"仍在里面"，否则会隐藏又被热区立刻唤出
+            if panel.frame.insetBy(dx: -1, dy: -1).contains(mouse) || onStrip {
                 outsideSince = nil
                 // 鼠标真的挪进面板本体（不是只停在拉手上）就准备接管键盘：
                 // 悬停拉手 0.28s 才弹面板，再等 0.15s 才激活，快速划过不会抢焦点。
-                let inBody = panel.frame.contains(mouse) && !strip.contains(mouse)
+                let inBody = panel.frame.contains(mouse) && !onStrip
                 if inBody, !NSApp.isActive {
                     if let at = enterActivateAt {
                         if Date() >= at { takeKeyboard() }
@@ -473,7 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        if !strip.contains(mouse) {
+        if !onStrip {
             suppressHover = false
             stripEnteredAt = nil
             return
@@ -484,7 +623,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // 先停留一小会儿再弹，给拖动留出手感
         if let since = stripEnteredAt {
-            if Date().timeIntervalSince(since) >= hoverDwell { showPanel(focus: false) }
+            if Date().timeIntervalSince(since) >= hoverDwell { showPanel(focus: false, on: sc) }
         } else {
             stripEnteredAt = Date()
         }
@@ -493,11 +632,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: 边缘提示条
 
     private func rebuildHotZones() {
-        hotWindows.forEach { $0.orderOut(nil) }
-        hotWindows.removeAll()
+        stripWindows.values.forEach { $0.orderOut(nil) }
+        stripWindows.removeAll()
 
-        for screen in NSScreen.screens {
+        for screen in visibleScreens {
             let rect = stripRect(for: screen)
+            let key = screen.displayUUID
             let win = StripWindow(
                 contentRect: rect,
                 styleMask: [.borderless, .nonactivatingPanel],
@@ -528,7 +668,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             view.onDrag = { [weak self, weak win] point in
                 guard let self = self, let win = win else { return }
                 self.stripDragging = true
-                guard let sc = win.screen ?? NSScreen.main else { return }
+                guard let sc = self.screen(withUUID: key) ?? win.screen else { return }
                 self.setStripPosition(mouseY: point.y, on: sc)
                 win.setFrame(self.stripRect(for: sc), display: true)
             }
@@ -538,32 +678,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.stripDragging = false
                 self.suppressHover = true
                 self.stripEnteredAt = nil
-                if let win = win, let sc = win.screen {
+                let sc = self.screen(withUUID: key) ?? win?.screen
+                if let win = win, let sc = sc {
                     win.setFrame(self.stripRect(for: sc), display: true)
                 }
-                // 单纯点一下（没拖动）就直接打开面板
-                if !moved { self.showPanel(focus: false) }
+                // 单纯点一下（没拖动）就在这块屏幕上打开面板
+                if !moved { self.showPanel(focus: false, on: sc) }
             }
             view.onMenu = { [weak self] event in
                 guard let self = self, let v = event.window?.contentView else { return }
-                self.showStripMenu(with: event, for: v)
+                self.showStripMenu(with: event, for: v, screen: self.screen(withUUID: key))
             }
 
             win.contentView = view
-            win.orderFrontRegardless()
-            hotWindows.append(win)
+            stripWindows[key] = win
         }
+        syncStripVisibility()
 
         // 提示条窗口重新建过之后，别把已展开的面板压住
         if panel.isVisible { panel.orderFrontRegardless() }
     }
 
-    /// 右键提示条：切换左右边缘 / 复位
-    private func showStripMenu(with event: NSEvent, for view: NSView) {
+    private func screen(withUUID uuid: String) -> NSScreen? {
+        NSScreen.screens.first { $0.displayUUID == uuid }
+    }
+
+    /// 右键提示条：左右边缘 / 显示在哪块屏幕 / 复位
+    private func showStripMenu(with event: NSEvent, for view: NSView, screen: NSScreen?) {
         suppressHover = true
         stripEnteredAt = nil
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
+
         let right = NSMenuItem(title: "停靠在屏幕右侧", action: #selector(dockRight), keyEquivalent: "")
         right.target = self
         right.state = side == "right" ? .on : .off
@@ -575,9 +722,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(left)
 
         menu.addItem(.separator())
+        let displayItem = NSMenuItem(title: "显示在", action: nil, keyEquivalent: "")
+        displayItem.submenu = makeDisplaySubmenu()
+        menu.addItem(displayItem)
+
         let reset = NSMenuItem(title: "位置复位到中间", action: #selector(resetStripPosition), keyEquivalent: "")
         reset.target = self
         menu.addItem(reset)
+
+        // 记下这次是从哪块屏幕点开的，复位/操作都针对它
+        if let sc = screen { activeScreen = sc }
 
         NSMenu.popUpContextMenu(menu, with: event, for: view)
     }

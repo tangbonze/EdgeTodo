@@ -3,5 +3,8 @@ build/
 dist/
 *.dmg
 
+# 宣传图（含界面截图，按约定不入库）
+screenshots/
+
 # 系统垃圾
 .DS_Store
