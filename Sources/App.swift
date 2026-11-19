@@ -8,6 +8,81 @@ final class PanelWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+// MARK: - 面板角落的缩放把手
+
+/// 面板贴在屏幕边缘，所以把手放在远离边缘的那个下角：
+/// 右侧停靠放左下角（宽度向左长），左侧停靠放右下角。
+/// 拖动时顶边固定、底边跟手，松手也没跳变。
+final class ResizeHandleView: NSView {
+    var onBegin: (() -> Void)?
+    /// 相对按下点的累计位移（屏幕坐标，y 向上为正）
+    var onResize: ((CGFloat, CGFloat) -> Void)?
+    /// 把手贴哪一侧：true = 左下角（面板停靠在右边时）
+    var atLeft = true {
+        didSet { if atLeft != oldValue { needsDisplay = true } }
+    }
+
+    private var origin: NSPoint?
+    private var isHot = false {
+        didSet { if isHot != oldValue { needsDisplay = true } }
+    }
+
+    /// 钉住常驻时面板不一定处于激活状态，第一次点击就该能拖，否则要连点两下
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        // 三道斜线，macOS 窗口缩放把手的老样子。
+        // 卡片圆角半径 26，所以线要画在距角 10pt 以外，否则会被圆角切掉。
+        let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        NSColor(white: isDark ? 1.0 : 0.0, alpha: isHot ? 0.55 : 0.36).setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 1.6
+        path.lineCapStyle = .round
+        let inset: CGFloat = 10
+        let step: CGFloat = 4.4
+        let cx = atLeft ? bounds.minX + inset : bounds.maxX - inset
+        let baseY = bounds.minY + inset
+        let sign: CGFloat = atLeft ? 1 : -1
+        for i in 0..<3 {
+            let o = CGFloat(i) * step
+            path.move(to: NSPoint(x: cx + o * sign, y: baseY))
+            path.line(to: NSPoint(x: cx, y: baseY + o))
+        }
+        path.stroke()
+    }
+
+    private func screenPoint(_ event: NSEvent) -> NSPoint {
+        window?.convertPoint(toScreen: event.locationInWindow) ?? .zero
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        origin = screenPoint(event)
+        isHot = true
+        onBegin?()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let o = origin else { return }
+        let p = screenPoint(event)
+        onResize?(p.x - o.x, p.y - o.y)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        origin = nil
+        isHot = false
+    }
+}
+
 // MARK: - 屏幕边缘的提示条（可拖动定位 / 右键菜单）
 
 final class HotZoneView: NSView {
@@ -179,7 +254,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var controller = PanelController()
     private let store = TodoStore.shared
-    private let panelSize = NSSize(width: 380, height: 600)   // 玻璃卡片即窗口本身，阴影沿圆角走
+    private let defaultPanelSize = NSSize(width: 380, height: 600)   // 玻璃卡片即窗口本身，阴影沿圆角走
+    private let minPanelSize = NSSize(width: 300, height: 340)
+    /// 拖动缩放时按下瞬间的尺寸与顶边位置，拖动全程以它们为基准算
+    private var resizeFrom: NSSize?
+    private var resizeTop: CGFloat?
+    private var resizeHandle: ResizeHandleView?
+
+    /// 面板尺寸：拖过角落就按存下来的来（重启、切语言都不丢）
+    private var panelSize: NSSize {
+        let store = UserDefaults.standard
+        let w = store.double(forKey: "panelWidth")
+        let h = store.double(forKey: "panelHeight")
+        return NSSize(
+            width: w > 0 ? CGFloat(w) : defaultPanelSize.width,
+            height: h > 0 ? CGFloat(h) : defaultPanelSize.height
+        )
+    }
+
+    /// 面板顶边相对「拉手中心」的偏移。没调过就是 nil，按高度居中处理，
+    /// 和旧版本的定位方式一致；调过之后顶边固定，下次唤起位置才不跳。
+    private var storedTopOffset: CGFloat? {
+        guard UserDefaults.standard.object(forKey: "panelTopOffset") != nil else { return nil }
+        return CGFloat(UserDefaults.standard.double(forKey: "panelTopOffset"))
+    }
     private let edgeStripWidth: CGFloat = 7
     private let edgeStripHeight: CGFloat = 52
     private let hideDelay: TimeInterval = 0.32
@@ -189,6 +287,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var side: String {
         get { UserDefaults.standard.string(forKey: "dockSide") ?? "right" }
         set { UserDefaults.standard.set(newValue, forKey: "dockSide") }
+    }
+
+    /// 面板是否钉在屏幕上（false = 鼠标移开就自动收起，默认行为）。
+    /// 钉住时面板可见后不再自动收起、不跟着鼠标搬家、也不主动抢键盘 ——
+    /// 抢焦点会让用户正在别的 App 里打的字跑进待办输入框，这是必须避免的。
+    private var pinPanel: Bool {
+        get { UserDefaults.standard.bool(forKey: "pinPanel") }
+        set { UserDefaults.standard.set(newValue, forKey: "pinPanel") }
     }
 
     /// 不显示提示条的显示器（UUID）。空集合 = 所有显示器都显示，
@@ -304,6 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lines.append("--- statusitem: NS(\(Int(f.minX)),\(Int(f.minY)),\(Int(f.width)),\(Int(f.height))) CG(\(Int(f.midX)),\(Int(cgY + f.height / 2))) ---")
         }
         if let menu = statusItem.menu {
+            menuWillOpen(menu)   // 调试：子菜单按真实状态构建出来，才能连子项一起打
             lines.append("--- menu ---")
             for item in menu.items {
                 if item.isSeparatorItem { lines.append("  ---"); continue }
@@ -323,9 +430,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// 点到别的 App 就收起（编辑提醒时保留）
+    /// 点到别的 App 就收起（编辑提醒时保留；钉住常驻时不收）
     func applicationDidResignActive(_ notification: Notification) {
-        if !busy { hidePanel() }
+        if busy || pinPanel { return }
+        hidePanel()
     }
 
     // MARK: 状态栏
@@ -334,6 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var dockLeftItem: NSMenuItem?
     private var loginMenuItem: NSMenuItem?
     private var displayMenuItem: NSMenuItem?
+    private var behaviorMenuItem: NSMenuItem?
     private var languageMenuItem: NSMenuItem?
 
     private func setupStatusItem() {
@@ -365,6 +474,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(displayItem)
         displayMenuItem = displayItem
         addItem(menu, L10n.t("提示条位置复位到中间", "Reset Strip Position"), #selector(resetStripPosition))
+        let behaviorItem = NSMenuItem(
+            title: L10n.t("面板显示方式", "Panel Behavior"), action: nil, keyEquivalent: ""
+        )
+        behaviorItem.submenu = NSMenu()
+        menu.addItem(behaviorItem)
+        behaviorMenuItem = behaviorItem
         menu.addItem(.separator())
         loginMenuItem = addItem(menu, L10n.t("开机自动启动", "Launch at Login"), #selector(toggleLogin))
         menu.addItem(.separator())
@@ -392,7 +507,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         dockLeftItem?.state = side == "left" ? .on : .off
         loginMenuItem?.state = LoginItem.isEnabled ? .on : .off
         displayMenuItem?.submenu = makeDisplaySubmenu()
+        behaviorMenuItem?.submenu = makeBehaviorSubmenu()
         languageMenuItem?.submenu = makeLanguageSubmenu()
+    }
+
+    // MARK: 面板显示方式
+
+    /// 「面板显示方式」子菜单：自动收起 / 一直显示
+    private func makeBehaviorSubmenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let options: [(String, String)] = [
+            ("auto", L10n.t("鼠标移开自动收起", "Auto-hide When Mouse Leaves")),
+            ("pin", L10n.t("一直显示", "Always Visible"))
+        ]
+        for (raw, title) in options {
+            let item = NSMenuItem(
+                title: title, action: #selector(changePanelBehavior(_:)), keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = raw
+            item.state = ((raw == "pin") == pinPanel) ? .on : .off
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func changePanelBehavior(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String else { return }
+        let wantPin = (raw == "pin")
+        guard wantPin != pinPanel else { return }
+        pinPanel = wantPin
+        if wantPin {
+            // 选了「一直显示」就立刻亮出来，否则勾完了不知道去哪看效果
+            if !panel.isVisible {
+                showPanel(focus: false, on: activeScreen ?? targetScreen())
+            }
+        } else {
+            outsideSince = nil   // 从常驻切回自动：重新开始算离开时间
+        }
     }
 
     // MARK: 语言切换
@@ -428,8 +581,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func togglePanelAction() { togglePanel() }
     @objc private func openReminders() { store.openRemindersApp() }
     @objc private func reloadAction() { store.reload() }
-    @objc private func dockRight() { side = "right"; rebuildHotZones() }
-    @objc private func dockLeft() { side = "left"; rebuildHotZones() }
+    @objc private func dockRight() { side = "right"; rebuildHotZones(); layoutResizeHandle() }
+    @objc private func dockLeft() { side = "left"; rebuildHotZones(); layoutResizeHandle() }
     @objc private func toggleLogin() { LoginItem.setEnabled(!LoginItem.isEnabled) }
     @objc private func quit() { NSApp.terminate(nil) }
 
@@ -541,6 +694,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         view.autoresizingMask = [.width, .height]
         container.addSubview(view)
         panel.contentView = container
+        installResizeHandle(in: container)
     }
 
     private func targetScreen() -> NSScreen {
@@ -566,16 +720,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         outsideSince = nil
         let sc = screen ?? activeScreen ?? targetScreen()
         activeScreen = sc
-        let vf = sc.visibleFrame
         let size = panelSize
-        let isRight = side == "right"
-
-        // 面板跟着提示条走：垂直居中对齐提示条，超出可视区再夹回来
-        let strip = stripRect(for: sc)
-        let wanted = strip.midY - size.height / 2
-        let y = min(max(vf.minY + 12, wanted), vf.maxY - size.height - 12)
-        let x = isRight ? vf.maxX - size.width : vf.minX
-        let target = NSRect(x: x, y: y, width: size.width, height: size.height)
+        let target = panelFrame(for: sc, size: size)
 
         if !panel.isVisible || panel.frame != target {
             panel.setFrame(target, display: true)
@@ -596,6 +742,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         store.reload()
         syncStripVisibility()   // 面板盖住的那块屏幕的拉手收起来，别叠在玻璃上
+    }
+
+    /// 面板该待在哪：贴边那条边固定，竖直方向对齐拉手
+    /// （没拖过大小就居中于拉手，拖过之后顶边固定）
+    private func panelFrame(for sc: NSScreen, size: NSSize) -> NSRect {
+        let vf = sc.visibleFrame
+        // 换了更小的屏幕时别让面板撑出屏幕外
+        let w = min(size.width, vf.width - 24)
+        let h = min(size.height, vf.height - 24)
+        let strip = stripRect(for: sc)
+        let offset = storedTopOffset ?? (size.height / 2)
+        let top = strip.midY + offset
+        // 面板比屏幕还高时先保底，别算出负的可用区间
+        let low = vf.minY + 12
+        let high = max(low, vf.maxY - h - 12)
+        let y = min(max(low, top - h), high)
+        let x = side == "right" ? vf.maxX - w : vf.minX
+        return NSRect(x: x, y: y, width: w, height: h)
+    }
+
+    // MARK: 拖动调整大小
+
+    private func installResizeHandle(in container: NSView) {
+        let handle = ResizeHandleView(frame: .zero)
+        handle.onBegin = { [weak self] in
+            guard let self = self else { return }
+            self.resizeFrom = self.panelSize
+            self.resizeTop = self.panel.frame.maxY
+        }
+        handle.onResize = { [weak self] dx, dy in
+            self?.resizePanel(by: dx, dy: dy)
+        }
+        container.addSubview(handle)
+        resizeHandle = handle
+        layoutResizeHandle()
+    }
+
+    /// 把手贴在「不贴屏幕」的那个下角
+    private func layoutResizeHandle() {
+        guard let handle = resizeHandle, let container = panel.contentView else { return }
+        let s: CGFloat = 26
+        let isRight = side == "right"
+        container.addSubview(handle, positioned: .above, relativeTo: nil)
+        handle.frame = NSRect(
+            x: isRight ? 0 : container.bounds.width - s,
+            y: 0, width: s, height: s
+        )
+        // 左侧停靠时钉右下角（左边距弹性），右侧停靠时钉左下角（右边距弹性）
+        handle.autoresizingMask = isRight ? [.maxXMargin, .maxYMargin] : [.minXMargin, .maxYMargin]
+        handle.atLeft = isRight
+    }
+
+    private func resizePanel(by dx: CGFloat, dy: CGFloat) {
+        guard let start = resizeFrom, let top = resizeTop, panel.isVisible else { return }
+        let sc = activeScreen ?? targetScreen()
+        let vf = sc.visibleFrame
+        let isRight = side == "right"
+
+        let maxW = min(720, vf.width - 60)
+        let maxH = vf.height - 24
+        let w = min(max(isRight ? start.width - dx : start.width + dx, minPanelSize.width), maxW)
+        let h = min(max(start.height - dy, minPanelSize.height), maxH)
+
+        let low = vf.minY + 12
+        let y = min(max(low, top - h), max(low, vf.maxY - h - 12))
+        let frame = NSRect(
+            x: isRight ? vf.maxX - w : vf.minX,
+            y: y, width: round(w), height: round(h)
+        )
+        guard frame.size != panel.frame.size else { return }
+
+        panel.setFrame(frame, display: true)
+        panel.invalidateShadow()
+        // 顶边位置记下来：松手后、下次唤起都保持这个相对位置
+        UserDefaults.standard.set(Double(frame.maxY - stripRect(for: sc).midY), forKey: "panelTopOffset")
+        UserDefaults.standard.set(Double(frame.width), forKey: "panelWidth")
+        UserDefaults.standard.set(Double(frame.height), forKey: "panelHeight")
     }
 
     /// 边缘拉手窗口的显隐（悬停判定靠轮询，不依赖窗口）
@@ -682,6 +905,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let onStrip = stripActive && strip.contains(mouse)
 
         if panel.isVisible {
+            // 钉住（一直显示）：面板亮出来之后完全交给用户控制 ——
+            // 不自动收起、不跟着鼠标搬到别的屏幕、也不主动抢键盘焦点。
+            // 收起状态下仍然认悬停，这样手动收起后还能用拉手唤回来。
+            if pinPanel { return }
             // 鼠标停到「另一块」屏幕的提示条上 → 面板跟着搬过去
             if onStrip, activeScreen?.displayUUID != sc.displayUUID {
                 showPanel(focus: false, on: sc)
@@ -707,7 +934,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             enterActivateAt = nil
             if busy { return }                                 // 正在编辑提醒
             if UserDefaults.standard.bool(forKey: "freezeHover") { return }   // 截图调试用
-            if panel.isKeyWindow && NSApp.isActive { return }   // 正在输入
+            if panel.isKeyWindow && NSApp.isActive,
+               panel.firstResponder is NSTextView { return }   // 正在输入
             if let since = outsideSince {
                 if Date().timeIntervalSince(since) >= hideDelay { hidePanel() }
             } else {

@@ -37,8 +37,9 @@ Get the latest `EdgeTodo-*.dmg` from [Releases](https://github.com/tangbonze/Edg
 | Click the list name at the top | Switch which Reminders list is shown |
 | `ESC` | Close the reminder editor / dismiss the draft row, then hide the panel |
 | Drag the grey handle | Move it up and down along the edge (remembered per display) |
+| **Drag the panel's bottom corner** | Resize the panel: lower-left when docked right, lower-right when docked left |
 | **Right-click the handle** | Dock to the left / right edge, choose which display, reset position to center |
-| Menu bar icon | Show/hide, dock left/right, strip display, reset position, launch at login, **switch interface language**, quit |
+| Menu bar icon | Show/hide, dock left/right, strip display, reset position, **panel behavior**, launch at login, switch interface language, quit |
 | **Click the mic at the bottom** | Start dictating: creates a new todo and turns your speech into text live |
 | Pause ~2.5 s while speaking / click the mic again | Stops dictation automatically and saves it as a reminder |
 | Press `Return` while dictating | Saves immediately and turns the mic off |
@@ -60,6 +61,21 @@ The interface comes in **English** and **简体中文**, and follows your system
 - Right-click any handle → **Displayed on**, then tick the displays you want handles on, or pick "All displays" in one go.
 - Turn a display's handle off and that display never shows one — hovering there won't pop the panel either.
 - You can't turn off every handle: if you'd end up with none, all of them are restored, so you never lose the only entry point.
+
+### Panel size
+
+- Three diagonal lines sit in the panel's bottom corner — drag them to resize. **Lower-left when docked to the right edge, lower-right when docked to the left**, i.e. always the corner away from the screen edge.
+- Width grows inward from the docked edge and height grows downward, so the top edge stays put and the panel doesn't jump after you let go.
+- Size and position are remembered across restarts, language switches and list switches. Minimum 300×340, maximum limited to the screen's visible area.
+
+### Panel behavior
+
+The panel can either auto-hide or stay pinned on screen.
+
+- Menu bar icon → **Panel Behavior** → "Auto-hide When Mouse Leaves" (default) / "Always Visible".
+- With "Always Visible", the panel stops hiding itself: moving the mouse away won't close it, and switching to another app won't either. Only `ESC`, `⌥⌘T` or the menu bar's Show / Hide closes it.
+- While pinned it never grabs keyboard focus on its own — typing in another app won't get swallowed by the panel just because the cursor crossed it. Click the panel to start typing.
+- Hovering still works when the panel is hidden: after closing it by hand, sliding over the screen-edge handle brings it back.
 
 ### Type the time right into the input row
 
@@ -132,7 +148,7 @@ codesign --force --sign "Developer ID Application: Your Name (TEAMID)" --options
 - Only incomplete items are shown; completed ones live in Reminders.
 - Reminder times are absolute (`EKAlarm(absoluteDate:)`); there are no relative alarms like "10 minutes before" — the context menu can be extended for that later.
 - The edge handle doubles as the hover hot zone: 7pt wide, 52pt long (drag to change its vertical position), so the panel only opens when you actually rest on it — no accidental triggers. Tune the size via `edgeStripWidth` / `edgeStripHeight` in `App.swift`.
-- The panel is a fixed 380×600 and appears on **the display you triggered it from** (the `⌥⌘T` hotkey and menu bar item use the display the mouse is on).
+- The panel is 380×600 by default (drag a bottom corner to resize — see above) and appears on **the display you triggered it from** (the `⌥⌘T` hotkey and menu bar item use the display the mouse is on).
 - Dictation uses the system's **on-device** model (`requiresOnDeviceRecognition`) and stays offline; it needs Microphone and Speech Recognition permissions, and the first mic click triggers the prompt. Known snag: some Bluetooth headsets deliver no audio through `AVAudioEngine`'s inputNode — switch to the built-in mic.
 - On some systems the **on-device** speech model may not be fully installed, in which case the system falls back to cloud recognition. That's system behavior; the app doesn't force it either way.
 

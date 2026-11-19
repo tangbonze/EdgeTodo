@@ -16,7 +16,9 @@ A todo list that lives on your screen edge
   · ⌥⌘T 显示 / 隐藏面板
   · 右键条目：设置提醒、移动列表、删除
   · 右键灰色拉手：切换左右边缘、选择显示在哪块屏幕
-  · 菜单栏图标：开机自启、切换界面语言（跟随系统 / 中文 / English）
+  · 拖面板下角的三道斜线可以调整面板大小，拖过就记住
+  · 菜单栏图标：面板显示方式（自动收起 / 一直显示）、开机自启、
+    切换界面语言（跟随系统 / 中文 / English）
 
 多显示器
   · 每块屏幕都可以有一条拉手（右键拉手 → 显示在）
@@ -50,7 +52,10 @@ Usage
   · Right-click an item: set reminder, move to another list, delete
   · Right-click the grey handle: dock to the left or right edge,
     or choose which display shows it
-  · Menu bar icon: launch at login, switch the interface language
+  · Drag the three diagonal lines in the panel's bottom corner to resize;
+    the size is remembered
+  · Menu bar icon: panel behavior (auto-hide / always visible),
+    launch at login, switch the interface language
     (Follow System / 中文 / English)
 
 Multiple displays
